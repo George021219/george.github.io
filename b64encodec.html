@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Base64 エンコーダ & デコーダ</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        h1 { border-bottom: 2px solid #ccc; padding-bottom: 10px; }
+        section { margin-bottom: 30px; padding: 20px; border: 1px solid #eee; border-radius: 5px; }
+        textarea { width: 100%; height: 150px; margin-top: 10px; padding: 10px; box-sizing: border-box; resize: vertical; }
+        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin-right: 10px; }
+        button:hover { background-color: #0056b3; }
+        .result-link { margin-top: 10px; display: block; font-weight: bold; }
+        .status { margin-top: 10px; color: #d9534f; }
+        #downloadTextBtn { background-color: #28a745; display: none; }
+        #downloadTextBtn:hover { background-color: #1e7e34; }
+        .decode-option { margin-bottom: 10px; display: flex; align-items: center; }
+        .decode-option input[type="file"] { margin-right: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>Base64 ファイル エンコーダ / デコーダ</h1>
+    <p>ファイルをブラウザ内で直接処理します。データは外部に送信されません。</p>
+
+    <section>
+        <h2>📥 ファイルをBase64にエンコード</h2>
+        <input type="file" id="fileToEncode">
+        <button onclick="handleEncode()">エンコード開始</button>
+        <button id="downloadTextBtn" onclick="downloadBase64Text()">テキストとしてダウンロード</button>
+        <div class="status" id="encodeStatus"></div>
+        <textarea id="base64Output" placeholder="エンコードされたBase64文字列が出力されます。" readonly></textarea>
+        <p>※Data URI形式（例: data:image/png;base64,...）で出力されます。</p>
+    </section>
+
+    <section>
+        <h2>📤 Base64をファイルにデコード</h2>
+        
+        <div class="decode-option">
+            <input type="file" id="fileToDecode" accept=".txt,.base64" onchange="handleFileDecode()">
+            <span>または</span>
+        </div>
+        
+        <p>Base64文字列をペーストしてください (Data URI形式推奨)。</p>
+        <textarea id="base64Input" placeholder="Data URI形式のBase64文字列をここに貼り付けます。"></textarea>
+        <button onclick="handleTextDecode()">デコード開始＆ダウンロード</button>
+        
+        <div class="status" id="decodeStatus"></div>
+        <a id="downloadLink" class="result-link" style="display: none;">デコードされたファイルをダウンロード</a>
+    </section>
+
+    <script>
+        // --- Base64 エンコード処理 ---
+        async function handleEncode() {
+            const fileInput = document.getElementById('fileToEncode');
+            const outputArea = document.getElementById('base64Output');
+            const status = document.getElementById('encodeStatus');
+            const downloadBtn = document.getElementById('downloadTextBtn');
+            const file = fileInput.files[0];
+
+            outputArea.value = '';
+            status.textContent = '';
+            downloadBtn.style.display = 'none';
+
+            if (!file) {
+                status.textContent = 'ファイルを選択してください。';
+                return;
+            }
+
+            status.textContent = `エンコード中... (${file.name})`;
+            
+            try {
+                // FileReader APIを使ってファイルをBase64 (Data URL) として読み込む
+                const base64String = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+
+                outputArea.value = base64String;
+                status.textContent = `エンコード完了！ (ファイルサイズ: ${formatBytes(file.size)})`;
+                downloadBtn.style.display = 'inline-block'; // ダウンロードボタンを表示
+
+            } catch (error) {
+                console.error("エンコードエラー:", error);
+                status.textContent = 'ファイルの読み込み中にエラーが発生しました。';
+            }
+        }
+
+        // --- エンコード結果（Base64テキスト）をダウンロードする機能 ---
+        function downloadBase64Text() {
+            const base64Data = document.getElementById('base64Output').value;
+            const fileInput = document.getElementById('fileToEncode');
+            const fileName = fileInput.files[0] ? fileInput.files[0].name : 'base64_data';
+            
+            if (!base64Data) return;
+
+            // Blobオブジェクトを作成
+            const blob = new Blob([base64Data], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            
+            // aタグを生成し、ダウンロードを実行
+            const a = document.createElement('a');
+            a.href = url;
+            // 元のファイル名に .base64.txt を付けてダウンロード名とする
+            a.download = fileName.replace(/(\.[^.]+)$/, '') + '.base64.txt'; 
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            URL.revokeObjectURL(url); // オブジェクトURLを解放
+        }
+        
+        // --- ファイルを読み込んでデコードを開始する処理 ---
+        function handleFileDecode() {
+            const fileInput = document.getElementById('fileToDecode');
+            const file = fileInput.files[0];
+            const status = document.getElementById('decodeStatus');
+
+            if (!file) {
+                status.textContent = 'ファイルが選択されていません。';
+                return;
+            }
+
+            status.textContent = `ファイルを読み込み中... (${file.name})`;
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                // ファイルの内容（Base64文字列）を取得
+                const base64Data = reader.result; 
+                // テキストエリアに設定し、デコード処理を実行
+                document.getElementById('base64Input').value = base64Data;
+                handleDecode(base64Data);
+            };
+
+            reader.onerror = (error) => {
+                console.error("ファイルの読み込みエラー:", error);
+                status.textContent = 'Base64ファイルの読み込み中にエラーが発生しました。';
+            };
+
+            // ファイルの内容をテキストとして読み込む
+            reader.readAsText(file);
+        }
+
+        // --- テキストエリアの内容からデコードを開始する処理 ---
+        function handleTextDecode() {
+            const base64Data = document.getElementById('base64Input').value.trim();
+            handleDecode(base64Data);
+        }
+
+        // --- Base64 デコードの本体処理 ---
+        function handleDecode(base64Data) {
+            const downloadLink = document.getElementById('downloadLink');
+            const status = document.getElementById('decodeStatus');
+
+            downloadLink.style.display = 'none';
+            status.textContent = '';
+            
+            if (!base64Data) {
+                status.textContent = 'Base64データがありません。';
+                return;
+            }
+
+            try {
+                // 1. Data URIのヘッダとBase64部分を分離
+                const parts = base64Data.split(',');
+                // ヘッダがない場合を考慮し、Base64文字列そのものとして扱う
+                const base64 = parts.length > 1 ? parts[1] : parts[0]; 
+                
+                const mimeMatch = parts[0].match(/:(.*?);/);
+                const mimeType = mimeMatch ? mimeMatch[1] : 'application/octet-stream'; // MIMEタイプがない場合はバイナリとして扱う
+                
+                // 2. Base64文字列をバイナリデータ（Uint8Array）にデコード
+                const binaryString = atob(base64);
+                const len = binaryString.length;
+                const uint8Array = new Uint8Array(len);
+
+                for (let i = 0; i < len; i++) {
+                    uint8Array[i] = binaryString.charCodeAt(i);
+                }
+
+                // 3. Blobオブジェクトを作成し、ダウンロードリンクを生成
+                const blob = new Blob([uint8Array], { type: mimeType });
+                const url = URL.createObjectURL(blob);
+                
+                // ファイル名の推測
+                const defaultFileName = 'decoded_file.' + (mimeType.split('/').pop().split('+').shift() || 'bin');
+
+                downloadLink.href = url;
+                downloadLink.download = defaultFileName; // ダウンロード時のファイル名
+                downloadLink.textContent = `デコード完了！ダウンロード (${defaultFileName}, サイズ: ${formatBytes(blob.size)})`;
+                downloadLink.style.display = 'block';
+                status.textContent = '';
+
+            } catch (e) {
+                console.error("デコードエラー:", e);
+                status.textContent = 'デコード中にエラーが発生しました。貼り付けた文字列またはファイルの内容を確認してください。';
+            }
+        }
+        
+        // ファイルサイズを見やすい形式に変換するヘルパー関数
+        function formatBytes(bytes, decimals = 2) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
+    </script>
+
+</body>
+</html>
